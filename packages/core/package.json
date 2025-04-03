@@ -1,6 +1,6 @@
 {
   "name": "@coffic/key-listener",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "macOS系统按键事件监听器",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
