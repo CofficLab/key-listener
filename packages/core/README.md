@@ -5,7 +5,7 @@ macOS系统全局键盘事件监听器。
 ## 功能介绍
 
 - 监听 macOS 系统上的所有键盘事件（包括应用内和应用外）
-- 支持所有类型的按键，包括普通键和修饰键（Command、Option、Control、Shift等）
+- 支持所有类型的按键（普通键和修饰键）
 - 使用原生模块实现，性能高效稳定
 - 提供简单的事件接口，易于集成
 - 智能处理重复事件，避免重复触发
@@ -33,8 +33,7 @@ const listener = new KeyListener();
 // 监听键盘事件
 listener.on('keypress', (event) => {
   console.log('按键事件:', {
-    keyCode: event.keyCode,      // 键码
-    modifierFlags: event.modifierFlags  // 修饰键状态
+    keyCode: event.keyCode  // 键码
   });
 });
 
@@ -86,7 +85,6 @@ new KeyListener()
 当检测到按键事件时触发。事件对象包含以下属性：
 
 - `keyCode: number` - 按键的键码
-- `modifierFlags: number` - 修饰键状态的位掩码
 
 ```typescript
 listener.on('keypress', (event) => {
@@ -117,7 +115,7 @@ listener.on('keypress', (event) => {
 
 3. **应用打包**: 在使用Electron或其他工具打包应用时，请确保正确包含原生模块文件。
 
-4. **事件处理**: 监听器会智能处理重复事件，确保每次按键只触发一次事件。对于修饰键，只在按下时触发事件，释放时不会触发。
+4. **事件处理**: 监听器会智能处理重复事件，确保每次按键只触发一次事件。
 
 ## 故障排除
 
