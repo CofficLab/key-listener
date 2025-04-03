@@ -1,13 +1,14 @@
 # @coffic/key-listener
 
-macOS系统Command键（⌘）双击事件监听器。
+macOS系统全局键盘事件监听器。
 
 ## 功能介绍
 
-- 监听macOS系统Command键（⌘）的双击事件
+- 监听 macOS 系统上的所有键盘事件（包括应用内和应用外）
+- 支持所有类型的按键，包括普通键和修饰键（Command、Option、Control、Shift等）
 - 使用原生模块实现，性能高效稳定
 - 提供简单的事件接口，易于集成
-- 支持自定义双击间隔和触发行为
+- 智能处理重复事件，避免重复触发
 
 ## 安装
 
@@ -17,22 +18,24 @@ npm install @coffic/key-listener
 
 ## 系统要求
 
-- **操作系统**: 仅支持macOS系统
+- **操作系统**: 仅支持 macOS 系统
 - **Node.js**: >= 14.0.0
 - **构建工具**: Xcode命令行工具（用于编译原生模块）
 
 ## 基本用法
 
 ```typescript
-import { CommandKeyListener } from '@coffic/key-listener';
+import { KeyListener } from '@coffic/key-listener';
 
 // 创建监听器实例
-const listener = new CommandKeyListener();
+const listener = new KeyListener();
 
-// 监听Command键双击事件
-listener.on('command-double-press', () => {
-  console.log('Command键被双击了!');
-  // 在这里执行您想要的操作
+// 监听键盘事件
+listener.on('keypress', (event) => {
+  console.log('按键事件:', {
+    keyCode: event.keyCode,      // 键码
+    modifierFlags: event.modifierFlags  // 修饰键状态
+  });
 });
 
 // 启动监听器（返回Promise）
@@ -52,15 +55,15 @@ listener.stop();
 
 ## API参考
 
-### `CommandKeyListener` 类
+### `KeyListener` 类
 
 #### 构造函数
 
 ```typescript
-new CommandKeyListener()
+new KeyListener()
 ```
 
-创建一个新的Command键双击监听器实例。
+创建一个新的键盘事件监听器实例。
 
 #### 方法
 
@@ -78,25 +81,43 @@ new CommandKeyListener()
 
 #### 事件
 
-##### `command-double-press`
+##### `keypress`
 
-当检测到Command键双击时触发。
+当检测到按键事件时触发。事件对象包含以下属性：
+
+- `keyCode: number` - 按键的键码
+- `modifierFlags: number` - 修饰键状态的位掩码
 
 ```typescript
-listener.on('command-double-press', () => {
-  // 处理双击事件
+listener.on('keypress', (event) => {
+  // 处理按键事件
 });
 ```
+
+## 常见键码参考
+
+- 54: 右Command键
+- 55: 左Command键
+- 56: 左Shift键
+- 57: Caps Lock键
+- 58: 左Option键
+- 59: 左Control键
+- 60: 右Shift键
+- 61: 右Option键
+- 62: 右Control键
+- 63: Function键
+
+更多键码请参考示例代码或文档。
 
 ## 注意事项
 
 1. **平台限制**: 此包仅在macOS系统上可用，在其他平台上将不起作用但不会导致错误。
 
-2. **权限要求**: 使用此监听器时，您的应用可能需要辅助功能（Accessibility）权限。首次使用时，macOS可能会提示用户授予权限。
+2. **权限要求**: 使用此监听器时，您的应用需要辅助功能（Accessibility）权限。首次使用时，macOS会提示用户授予权限。
 
 3. **应用打包**: 在使用Electron或其他工具打包应用时，请确保正确包含原生模块文件。
 
-4. **可能的冲突**: 此监听器使用系统级事件监听，可能与其他使用相同技术的应用产生冲突。
+4. **事件处理**: 监听器会智能处理重复事件，确保每次按键只触发一次事件。对于修饰键，只在按下时触发事件，释放时不会触发。
 
 ## 故障排除
 
@@ -113,10 +134,6 @@ listener.on('command-double-press', () => {
 - 确保已安装Xcode命令行工具：`xcode-select --install`
 - 确保Node.js版本兼容
 - 尝试使用`npm rebuild`重建原生模块
-- 如果遇到 Python 相关错误（如 `ModuleNotFoundError: No module named 'distutils'`）：
-  - 确保使用 Python 3.11 或更低版本（Python 3.12+ 移除了 distutils）
-  - 或安装缺失的依赖：`pip install setuptools distutils`
-  - 对于项目维护者：在CI/CD环境中，请使用 `actions/setup-python@v4` 并指定 `python-version: '3.11'`
 
 ## 许可证
 

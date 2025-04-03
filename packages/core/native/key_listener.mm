@@ -9,12 +9,19 @@ struct {
     id localMonitor;
     id globalMonitor;
     NSTimeInterval lastEventTime;
+    NSUInteger lastModifierFlags;  // 记录上一次的修饰键状态
 } state;
 
 // 事件数据结构
 struct KeyEventData {
     uint16_t keyCode;
+    uint64_t modifierFlags;
 };
+
+// 检查特定修饰键是否被按下
+bool isModifierKeyPressed(NSUInteger flags, NSUInteger mask) {
+    return (flags & mask) == mask;
+}
 
 // 安全地处理事件回调
 bool SafeHandleKeyEvent(NSEvent* event) {
@@ -23,47 +30,91 @@ bool SafeHandleKeyEvent(NSEvent* event) {
             return false;
         }
 
-        // 检查事件时间戳，防止重复事件
-        NSTimeInterval currentTime = event.timestamp;
-        if (currentTime - state.lastEventTime < 0.01) { // 10毫秒内的事件视为重复
-            return false;
-        }
-        state.lastEventTime = currentTime;
+        // 判断是否是修饰键
+        bool isModifierKey = (event.keyCode >= 54 && event.keyCode <= 63); // 修饰键的键码范围
 
-        // 根据事件类型决定是否处理
-        if (event.type == NSEventTypeFlagsChanged) {
-            // 对于修饰键，只在 FlagsChanged 事件时处理
-            KeyEventData* data = new KeyEventData();
-            data->keyCode = event.keyCode;
-            state.tsfn.NonBlockingCall(data, [](Napi::Env env, Napi::Function jsCallback, KeyEventData* data) {
-                @autoreleasepool {
-                    Napi::Object event = Napi::Object::New(env);
-                    event.Set("keyCode", data->keyCode);
-                    jsCallback.Call({event});
-                    delete data;
-                }
-            });
-            return true;
-        } else if (event.type == NSEventTypeKeyDown) {
-            // 对于普通按键，只在 KeyDown 事件时处理
-            // 检查是否是修饰键的 KeyDown 事件
-            NSUInteger modifierFlags = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
-            bool isModifierKey = (event.keyCode >= 54 && event.keyCode <= 63); // 修饰键的键码范围
-            if (!isModifierKey) {
+        if (isModifierKey) {
+            // 对于修饰键，只处理 FlagsChanged 事件
+            if (event.type != NSEventTypeFlagsChanged) {
+                return false;
+            }
+
+            // 获取当前修饰键的掩码
+            NSUInteger modifierMask = 0;
+            switch (event.keyCode) {
+                case 54: // Right Command
+                case 55: // Left Command
+                    modifierMask = NSEventModifierFlagCommand;
+                    break;
+                case 56: // Left Shift
+                case 60: // Right Shift
+                    modifierMask = NSEventModifierFlagShift;
+                    break;
+                case 58: // Left Option
+                case 61: // Right Option
+                    modifierMask = NSEventModifierFlagOption;
+                    break;
+                case 59: // Left Control
+                case 62: // Right Control
+                    modifierMask = NSEventModifierFlagControl;
+                    break;
+                default:
+                    return false;
+            }
+
+            // 检查修饰键是否刚被按下
+            bool wasPressed = isModifierKeyPressed(state.lastModifierFlags, modifierMask);
+            bool isPressed = isModifierKeyPressed(event.modifierFlags, modifierMask);
+
+            // 更新状态
+            state.lastModifierFlags = event.modifierFlags;
+
+            // 只在修饰键刚被按下时触发事件
+            if (!wasPressed && isPressed) {
                 KeyEventData* data = new KeyEventData();
                 data->keyCode = event.keyCode;
+                data->modifierFlags = event.modifierFlags;
+                
                 state.tsfn.NonBlockingCall(data, [](Napi::Env env, Napi::Function jsCallback, KeyEventData* data) {
                     @autoreleasepool {
                         Napi::Object event = Napi::Object::New(env);
                         event.Set("keyCode", data->keyCode);
+                        event.Set("modifierFlags", (double)data->modifierFlags);
                         jsCallback.Call({event});
                         delete data;
                     }
                 });
                 return true;
             }
+            return false;
+        } else {
+            // 对于普通键，只处理 KeyDown 事件
+            if (event.type != NSEventTypeKeyDown) {
+                return false;
+            }
+
+            // 检查事件时间戳，防止重复事件
+            NSTimeInterval currentTime = event.timestamp;
+            if (currentTime - state.lastEventTime < 0.01) { // 10毫秒内的事件视为重复
+                return false;
+            }
+            state.lastEventTime = currentTime;
+
+            KeyEventData* data = new KeyEventData();
+            data->keyCode = event.keyCode;
+            data->modifierFlags = event.modifierFlags;
+            
+            state.tsfn.NonBlockingCall(data, [](Napi::Env env, Napi::Function jsCallback, KeyEventData* data) {
+                @autoreleasepool {
+                    Napi::Object event = Napi::Object::New(env);
+                    event.Set("keyCode", data->keyCode);
+                    event.Set("modifierFlags", (double)data->modifierFlags);
+                    jsCallback.Call({event});
+                    delete data;
+                }
+            });
+            return true;
         }
-        return false;
 
     } @catch (NSException* exception) {
         NSLog(@"Error handling key event: %@", exception);
@@ -101,6 +152,7 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
         
         // 初始化状态
         state.lastEventTime = 0;
+        state.lastModifierFlags = 0;
         
         // 添加本地按键监听器
         state.localMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:(NSEventMaskKeyDown | NSEventMaskFlagsChanged)
@@ -189,6 +241,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
         state.localMonitor = nil;
         state.globalMonitor = nil;
         state.lastEventTime = 0;
+        state.lastModifierFlags = 0;
         
         exports.Set("start", Napi::Function::New(env, Start));
         exports.Set("stop", Napi::Function::New(env, Stop));

@@ -4,6 +4,7 @@
         "cflags",
         "coffic",
         "distutils",
+        "frontmost",
         "libc",
         "napi",
         "numer",
