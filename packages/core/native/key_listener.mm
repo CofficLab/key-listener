@@ -1,3 +1,45 @@
+/**
+ * @file key_listener.mm
+ * @brief macOS 全局键盘事件监听器的原生实现
+ * 
+ * 这个模块实现了一个全局键盘事件监听器，可以在应用内外捕获键盘事件。
+ * 主要特点：
+ * 1. 同时支持应用内和应用外的键盘事件监听
+ * 2. 每个按键在一次按下过程中只触发一次事件（无论是普通键还是修饰键）
+ * 3. 不区分按键类型，统一处理所有按键事件
+ * 
+ * 实现原理：
+ * 1. 使用 NSEvent 的 addLocalMonitorForEventsMatchingMask 监听应用内按键
+ * 2. 使用 NSEvent 的 addGlobalMonitorForEventsMatchingMask 监听应用外按键
+ * 3. 通过 pressedKeys 字典跟踪按键状态，确保每个按键只触发一次
+ * 4. 使用时间戳检查作为额外的防重复保护机制
+ * 
+ * 使用注意：
+ * 1. 需要确保应用有辅助功能权限（Accessibility Permission）
+ * 2. 建议在应用启动时调用 start，退出时调用 stop
+ * 3. 回调函数会收到一个包含 keyCode 的事件对象
+ * 4. 不要依赖事件的触发频率，每个按键在按下时只会触发一次
+ * 
+ * 示例用法：
+ * ```javascript
+ * const keyListener = require('@coffic/core');
+ * keyListener.start((event) => {
+ *   console.log('Key pressed:', event.keyCode);
+ * });
+ * ```
+ * 
+ * 已知限制：
+ * 1. 只支持 macOS 平台
+ * 2. 需要用户授予辅助功能权限
+ * 3. 不提供按键的字符信息，只提供 keyCode
+ * 
+ * 内部实现细节：
+ * 1. 使用 NSMutableDictionary 跟踪按键状态
+ * 2. 统一处理 KeyDown 和 FlagsChanged 事件
+ * 3. 在按键释放时（KeyUp 或 FlagsChanged）清理状态
+ * 4. 使用线程安全的回调机制确保事件处理的可靠性
+ */
+
 #import <napi.h>
 #import <Foundation/Foundation.h>
 #import <AppKit/AppKit.h>
@@ -9,19 +51,13 @@ struct {
     id localMonitor;
     id globalMonitor;
     NSTimeInterval lastEventTime;
-    NSUInteger lastModifierFlags;  // 记录上一次的修饰键状态
+    NSMutableDictionary* pressedKeys;  // 记录按下的键
 } state;
 
 // 事件数据结构
 struct KeyEventData {
     uint16_t keyCode;
-    uint64_t modifierFlags;
 };
-
-// 检查特定修饰键是否被按下
-bool isModifierKeyPressed(NSUInteger flags, NSUInteger mask) {
-    return (flags & mask) == mask;
-}
 
 // 安全地处理事件回调
 bool SafeHandleKeyEvent(NSEvent* event) {
@@ -30,91 +66,69 @@ bool SafeHandleKeyEvent(NSEvent* event) {
             return false;
         }
 
-        // 判断是否是修饰键
-        bool isModifierKey = (event.keyCode >= 54 && event.keyCode <= 63); // 修饰键的键码范围
-
-        if (isModifierKey) {
-            // 对于修饰键，只处理 FlagsChanged 事件
-            if (event.type != NSEventTypeFlagsChanged) {
-                return false;
-            }
-
-            // 获取当前修饰键的掩码
-            NSUInteger modifierMask = 0;
-            switch (event.keyCode) {
-                case 54: // Right Command
-                case 55: // Left Command
-                    modifierMask = NSEventModifierFlagCommand;
-                    break;
-                case 56: // Left Shift
-                case 60: // Right Shift
-                    modifierMask = NSEventModifierFlagShift;
-                    break;
-                case 58: // Left Option
-                case 61: // Right Option
-                    modifierMask = NSEventModifierFlagOption;
-                    break;
-                case 59: // Left Control
-                case 62: // Right Control
-                    modifierMask = NSEventModifierFlagControl;
-                    break;
-                default:
-                    return false;
-            }
-
-            // 检查修饰键是否刚被按下
-            bool wasPressed = isModifierKeyPressed(state.lastModifierFlags, modifierMask);
-            bool isPressed = isModifierKeyPressed(event.modifierFlags, modifierMask);
-
-            // 更新状态
-            state.lastModifierFlags = event.modifierFlags;
-
-            // 只在修饰键刚被按下时触发事件
-            if (!wasPressed && isPressed) {
-                KeyEventData* data = new KeyEventData();
-                data->keyCode = event.keyCode;
-                data->modifierFlags = event.modifierFlags;
-                
-                state.tsfn.NonBlockingCall(data, [](Napi::Env env, Napi::Function jsCallback, KeyEventData* data) {
-                    @autoreleasepool {
-                        Napi::Object event = Napi::Object::New(env);
-                        event.Set("keyCode", data->keyCode);
-                        event.Set("modifierFlags", (double)data->modifierFlags);
-                        jsCallback.Call({event});
-                        delete data;
-                    }
-                });
-                return true;
-            }
+        // 检查事件时间戳，防止重复事件
+        NSTimeInterval currentTime = event.timestamp;
+        if (currentTime - state.lastEventTime < 0.01) { // 10毫秒内的事件视为重复
             return false;
-        } else {
-            // 对于普通键，只处理 KeyDown 事件
-            if (event.type != NSEventTypeKeyDown) {
-                return false;
-            }
-
-            // 检查事件时间戳，防止重复事件
-            NSTimeInterval currentTime = event.timestamp;
-            if (currentTime - state.lastEventTime < 0.01) { // 10毫秒内的事件视为重复
-                return false;
-            }
-            state.lastEventTime = currentTime;
-
-            KeyEventData* data = new KeyEventData();
-            data->keyCode = event.keyCode;
-            data->modifierFlags = event.modifierFlags;
-            
-            state.tsfn.NonBlockingCall(data, [](Napi::Env env, Napi::Function jsCallback, KeyEventData* data) {
-                @autoreleasepool {
-                    Napi::Object event = Napi::Object::New(env);
-                    event.Set("keyCode", data->keyCode);
-                    event.Set("modifierFlags", (double)data->modifierFlags);
-                    jsCallback.Call({event});
-                    delete data;
-                }
-            });
-            return true;
         }
+
+        NSNumber* keyCode = @(event.keyCode);
+        
+        if (event.type == NSEventTypeKeyDown) {
+            // 如果键已经按下，不再触发
+            if ([state.pressedKeys objectForKey:keyCode]) {
+                return false;
+            }
+            // 记录键的按下状态
+            [state.pressedKeys setObject:@YES forKey:keyCode];
+            state.lastEventTime = currentTime;
+        } else if (event.type == NSEventTypeKeyUp) {
+            // 键释放时，移除记录
+            [state.pressedKeys removeObjectForKey:keyCode];
+            return false;
+        } else if (event.type == NSEventTypeFlagsChanged) {
+            // 修饰键的按下事件
+            static NSUInteger lastFlags = 0;
+            NSUInteger newFlags = event.modifierFlags;
+            
+            // 如果新的标志位比旧的少，说明是释放事件，移除记录并返回
+            if (newFlags < lastFlags) {
+                [state.pressedKeys removeObjectForKey:keyCode];
+                lastFlags = newFlags;
+                return false;
+            }
+            
+            // 如果标志位没有变化，不处理
+            if (newFlags == lastFlags) {
+                return false;
+            }
+            
+            // 如果键已经按下，不再触发
+            if ([state.pressedKeys objectForKey:keyCode]) {
+                return false;
+            }
+            
+            // 记录新的状态
+            [state.pressedKeys setObject:@YES forKey:keyCode];
+            lastFlags = newFlags;
+            state.lastEventTime = currentTime;
+        } else {
+            // 其他类型的事件不处理
+            return false;
+        }
+
+        KeyEventData* data = new KeyEventData();
+        data->keyCode = event.keyCode;
+        
+        state.tsfn.NonBlockingCall(data, [](Napi::Env env, Napi::Function jsCallback, KeyEventData* data) {
+            @autoreleasepool {
+                Napi::Object event = Napi::Object::New(env);
+                event.Set("keyCode", data->keyCode);
+                jsCallback.Call({event});
+                delete data;
+            }
+        });
+        return true;
 
     } @catch (NSException* exception) {
         NSLog(@"Error handling key event: %@", exception);
@@ -152,17 +166,17 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
         
         // 初始化状态
         state.lastEventTime = 0;
-        state.lastModifierFlags = 0;
+        state.pressedKeys = [[NSMutableDictionary alloc] init];
         
         // 添加本地按键监听器
-        state.localMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:(NSEventMaskKeyDown | NSEventMaskFlagsChanged)
+        state.localMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:(NSEventMaskKeyDown | NSEventMaskKeyUp | NSEventMaskFlagsChanged)
             handler:^NSEvent *(NSEvent *event) {
                 SafeHandleKeyEvent(event);
                 return event;
             }];
         
         // 添加全局按键监听器
-        state.globalMonitor = [NSEvent addGlobalMonitorForEventsMatchingMask:(NSEventMaskKeyDown | NSEventMaskFlagsChanged)
+        state.globalMonitor = [NSEvent addGlobalMonitorForEventsMatchingMask:(NSEventMaskKeyDown | NSEventMaskKeyUp | NSEventMaskFlagsChanged)
             handler:^(NSEvent *event) {
                 SafeHandleKeyEvent(event);
             }];
@@ -180,6 +194,8 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
             if (state.tsfn) {
                 state.tsfn.Release();
             }
+            [state.pressedKeys release];
+            state.pressedKeys = nil;
             Napi::Error::New(env, "Failed to create key monitors").ThrowAsJavaScriptException();
             return env.Undefined();
         }
@@ -203,7 +219,6 @@ Napi::Value Stop(const Napi::CallbackInfo& info) {
     }
     
     @try {
-        // 移除事件监听器
         if (state.localMonitor) {
             [NSEvent removeMonitor:state.localMonitor];
             state.localMonitor = nil;
@@ -218,6 +233,10 @@ Napi::Value Stop(const Napi::CallbackInfo& info) {
         if (state.tsfn) {
             state.tsfn.Release();
         }
+        
+        // 清理按键状态
+        [state.pressedKeys release];
+        state.pressedKeys = nil;
         
         state.isListening = false;
         return Napi::Boolean::New(env, true);
@@ -241,7 +260,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
         state.localMonitor = nil;
         state.globalMonitor = nil;
         state.lastEventTime = 0;
-        state.lastModifierFlags = 0;
+        state.pressedKeys = nil;
         
         exports.Set("start", Napi::Function::New(env, Start));
         exports.Set("stop", Napi::Function::New(env, Stop));

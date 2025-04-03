@@ -10,7 +10,7 @@ const os = require('os');
  * 仅在macOS上实际编译，其他平台创建一个mock模块
  */
 function buildNativeModule() {
-  console.log('开始构建监听器原生模块...');
+  console.log('🚀 开始构建监听器原生模块...');
 
   // 检查是否在macOS上运行
   const platform = os.platform();
@@ -46,11 +46,11 @@ function buildNativeModule() {
   }
 
   // 在macOS系统上使用node-gyp编译原生模块
-  console.log('在macOS上构建原生模块...');
+  console.log('🔨 在macOS上构建原生模块...');
   ensureDirExists(buildDir);
 
   // 使用node-gyp构建
-  console.log('执行node-gyp rebuild...');
+  console.log('👷 执行node-gyp rebuild...');
   const result = spawnSync('node-gyp', ['rebuild'], {
     cwd: __dirname,
     stdio: 'inherit',
@@ -81,12 +81,12 @@ function buildNativeModule() {
 
   // 复制编译后的文件到目标位置
   fs.copyFileSync(sourcePath, targetPath);
-  console.log(`已复制编译后的模块到: ${targetPath}`);
+  console.log(`✅ 已复制编译后的模块到: ${targetPath}`);
 
   // 清理
   fs.rmSync(path.join(__dirname, 'build'), { force: true, recursive: true });
 
-  console.log('原生模块构建完成! 🎉🎉🎉');
+  console.log('🎉 原生模块构建完成!');
 }
 
 // 执行构建
