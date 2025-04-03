@@ -1,6 +1,5 @@
 import { EventEmitter } from "events"
 import * as os from "os"
-import * as path from "path"
 
 /**
  * 键盘事件数据
@@ -10,6 +9,14 @@ export interface KeyEvent {
     keyCode: number
     /** 修饰键状态 */
     modifierFlags: number
+}
+
+/**
+ * 原生模块接口
+ */
+interface NativeModule {
+    start(callback: (event: KeyEvent) => void): boolean
+    stop(): boolean
 }
 
 /**
@@ -35,35 +42,13 @@ export interface KeyListenerInterface extends EventEmitter {
     isListening(): boolean
 }
 
-// 加载原生模块
-function loadNativeModule() {
+// 静态导入原生模块
+let nativeModule: NativeModule | null = null;
+if (os.platform() === "darwin") {
     try {
-        if (os.platform() !== "darwin") {
-            console.warn("警告: 键盘监听器仅在macOS上可用")
-            return null
-        }
-
-        const possiblePaths = [
-            path.join(__dirname, "..", "dist", "key_listener.node"),
-            path.join(process.cwd(), "dist", "key_listener.node"),
-            path.join(__dirname, "dist", "key_listener.node"),
-        ]
-
-        for (const modulePath of possiblePaths) {
-            try {
-                if (require("fs").existsSync(modulePath)) {
-                    return require(modulePath)
-                }
-            } catch (err) {
-                console.error("加载模块失败:", modulePath, err)
-            }
-        }
-
-        console.error("找不到键盘监听器原生模块")
-        return null
+        nativeModule = require("./key_listener.node");
     } catch (error) {
-        console.error("加载键盘监听器原生模块失败:", error)
-        return null
+        console.error("加载键盘监听器原生模块失败:", error);
     }
 }
 
@@ -75,16 +60,12 @@ function loadNativeModule() {
  */
 export class KeyListener extends EventEmitter implements KeyListenerInterface {
     private _isListening: boolean = false
-    private _nativeModule: any | null
 
     constructor() {
         super()
 
         if (os.platform() !== "darwin") {
             console.warn("警告: 键盘监听器仅在macOS上可用")
-            this._nativeModule = null
-        } else {
-            this._nativeModule = loadNativeModule()
         }
     }
 
@@ -94,13 +75,13 @@ export class KeyListener extends EventEmitter implements KeyListenerInterface {
     async start(): Promise<boolean> {
         if (this._isListening) return true
 
-        if (!this._nativeModule) {
+        if (!nativeModule) {
             console.error("原生键盘监听器不可用")
             return false
         }
 
         try {
-            const success = this._nativeModule.start((event: KeyEvent) => {
+            const success = nativeModule.start((event: KeyEvent) => {
                 this.emit("keypress", event)
             })
 
@@ -118,9 +99,9 @@ export class KeyListener extends EventEmitter implements KeyListenerInterface {
     stop(): boolean {
         if (!this._isListening) return true
 
-        if (this._nativeModule) {
+        if (nativeModule) {
             try {
-                const success = this._nativeModule.stop()
+                const success = nativeModule.stop()
                 this._isListening = false
                 return success
             } catch (error) {
