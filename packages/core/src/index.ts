@@ -7,8 +7,6 @@ import * as os from "os"
 export interface KeyEvent {
     /** 键码 */
     keyCode: number
-    /** 修饰键状态 */
-    modifierFlags: number
 }
 
 /**
