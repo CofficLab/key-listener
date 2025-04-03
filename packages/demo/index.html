@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>键盘监听器演示</title>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+
+        .status.active {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .status.inactive {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        .current-key {
+            font-size: 24px;
+            padding: 20px;
+            background-color: #e9ecef;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .event-log {
+            height: 300px;
+            overflow-y: auto;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            border: 1px solid #dee2e6;
+        }
+
+        .event-item {
+            margin: 5px 0;
+            padding: 5px;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .event-item:last-child {
+            border-bottom: none;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        button {
+            padding: 8px 16px;
+            border-radius: 5px;
+            border: none;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>键盘监听器演示</h1>
+
+        <div id="listenerStatus" class="status inactive">
+            监听器状态: 未启动
+        </div>
+
+        <div class="current-key" id="currentKey">
+            等待按键...
+        </div>
+
+        <div class="controls">
+            <button id="startButton">启动监听器</button>
+            <button id="stopButton" disabled>停止监听器</button>
+            <button id="clearButton">清除日志</button>
+        </div>
+
+        <h3>使用说明</h3>
+        <ul>
+            <li>启动监听器后，所有键盘按键事件都会在下方显示</li>
+            <li>每个事件都会显示按键的键码和当前按下的修饰键</li>
+            <li>如果没有反应，请确保已授予应用"辅助功能"权限</li>
+        </ul>
+
+        <div class="event-log" id="eventLog"></div>
+    </div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+
+        // 获取 DOM 元素
+        const listenerStatus = document.getElementById('listenerStatus');
+        const currentKey = document.getElementById('currentKey');
+        const eventLog = document.getElementById('eventLog');
+        const startButton = document.getElementById('startButton');
+        const stopButton = document.getElementById('stopButton');
+        const clearButton = document.getElementById('clearButton');
+
+        // 更新监听器状态显示
+        function updateListenerStatus(status) {
+            listenerStatus.textContent = `监听器状态: ${status.isListening ? '运行中' : '已停止'}`;
+            listenerStatus.className = `status ${status.isListening ? 'active' : 'inactive'}`;
+            startButton.disabled = status.isListening;
+            stopButton.disabled = !status.isListening;
+
+            if (status.error) {
+                listenerStatus.textContent += ` (错误: ${status.error})`;
+            }
+        }
+
+        // 添加事件到日志
+        function addEventToLog(event) {
+            const eventItem = document.createElement('div');
+            eventItem.className = 'event-item';
+            eventItem.textContent = `按键: ${event.keyName} (键码: ${event.keyCode})`;
+            eventLog.insertBefore(eventItem, eventLog.firstChild);
+
+            // 限制日志条目数量
+            if (eventLog.children.length > 50) {
+                eventLog.removeChild(eventLog.lastChild);
+            }
+        }
+
+        // 监听键盘事件
+        ipcRenderer.on('keypress', (event, data) => {
+            // 更新当前按键显示
+            currentKey.textContent = data.keyName;
+
+            // 添加到日志
+            addEventToLog(data);
+        });
+
+        // 监听状态更新
+        ipcRenderer.on('listener-status', (event, status) => {
+            updateListenerStatus(status);
+        });
+
+        // 按钮事件处理
+        startButton.addEventListener('click', () => {
+            ipcRenderer.send('control-listener', 'start');
+        });
+
+        stopButton.addEventListener('click', () => {
+            ipcRenderer.send('control-listener', 'stop');
+        });
+
+        clearButton.addEventListener('click', () => {
+            eventLog.innerHTML = '';
+            currentKey.textContent = '等待按键...';
+        });
+    </script>
+</body>
+
+</html>

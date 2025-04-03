@@ -1,0 +1,13 @@
+{
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "pnpm --filter @coffic/key-listener build",
+    "demo": "pnpm --filter demo start"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}
