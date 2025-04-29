@@ -5,6 +5,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "commonjs",
+  "homepage": "https://github.com/CofficLab/key-listener",
   "publishConfig": {
     "access": "public"
   },
