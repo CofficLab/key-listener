@@ -1,7 +1,15 @@
 # @coffic/key-listener
 
-[![English](https://img.shields.io/badge/English-Click-yellow)](README.md)
-[![简体中文](https://img.shields.io/badge/中文文档-点击查看-orange)](README-zh.md)
+[![English](https://img.shields.io/badge/English-violet)](README.md)
+[![简体中文](https://img.shields.io/badge/中文文档-gray)](README-zh.md)
+[![DEV](https://img.shields.io/badge/DEV-gray)](README-dev.md)
+[![NPM](https://img.shields.io/badge/NPM-orange)](https://www.npmjs.com/package/@coffic/key-listener)
+![NPM Downloads](https://img.shields.io/npm/dm/%40coffic%2Fkey-listener)
+![NPM Version](https://img.shields.io/npm/v/%40coffic%2Fkey-listener)
+[![Coffic](https://img.shields.io/badge/Coffic-green)](https://coffic.cn)
+[![Maintainer](https://img.shields.io/badge/Maintainer-blue)](https://github.com/nookery)
+![GitHub License](https://img.shields.io/github/license/cofficlab/key-listner)
+
 
 A global keyboard event listener for macOS.
 
